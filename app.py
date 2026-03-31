@@ -83,37 +83,31 @@ def main():
         # Display an audio player so the user can listen to the uploaded file
         st.audio(uploaded_file)
         
-        col1, col2 = st.columns(2)
-        
-        with st.spinner('Converting audio to spectrogram & analyzing...'):
+        with st.spinner('Converting audio & analyzing...'):
             # Convert the raw audio to a spectrogram image
             file_extension = os.path.splitext(uploaded_file.name)[1]
             image = audio_to_spectrogram(uploaded_file.read(), file_extension)
             
             if image is not None:
-                with col1:
-                    st.image(image, caption="Generated Spectrogram", use_column_width=True)
+                st.write("### Analysis Results")
                 
-                with col2:
-                    st.write("### Analysis Results")
-                    
-                    # Preprocess for model (Resize to 128x128, scale 0-1, add batch dimension)
-                    img = image.resize((IMG_WIDTH, IMG_HEIGHT))
-                    img_array = tf.keras.preprocessing.image.img_to_array(img)
-                    img_array = img_array / 255.0
-                    img_array = np.expand_dims(img_array, axis=0)
-                    
-                    # Make prediction
-                    prediction = model.predict(img_array)[0][0]
-                    
-                    is_hindi = prediction > 0.5
-                    predicted_class = CLASS_NAMES[1] if is_hindi else CLASS_NAMES[0]
-                    confidence = prediction if is_hindi else (1 - prediction)
-                    
-                    color = "green" if confidence > 0.8 else "orange"
-                    st.markdown(f"**Predicted Language:** <span style='color:{color}; font-size:24px;'>{predicted_class}</span>", unsafe_allow_html=True)
-                    st.write(f"**Confidence:** {confidence * 100:.2f}%")
-                    st.progress(float(confidence))
+                # Preprocess for model (Resize to 128x128, scale 0-1, add batch dimension)
+                img = image.resize((IMG_WIDTH, IMG_HEIGHT))
+                img_array = tf.keras.preprocessing.image.img_to_array(img)
+                img_array = img_array / 255.0
+                img_array = np.expand_dims(img_array, axis=0)
+                
+                # Make prediction
+                prediction = model.predict(img_array)[0][0]
+                
+                is_hindi = prediction > 0.5
+                predicted_class = CLASS_NAMES[1] if is_hindi else CLASS_NAMES[0]
+                confidence = prediction if is_hindi else (1 - prediction)
+                
+                color = "green" if confidence > 0.8 else "orange"
+                st.markdown(f"**Predicted Language:** <span style='color:{color}; font-size:24px;'>{predicted_class}</span>", unsafe_allow_html=True)
+                st.write(f"**Confidence:** {confidence * 100:.2f}%")
+                st.progress(float(confidence))
 
 if __name__ == '__main__':
     main()
