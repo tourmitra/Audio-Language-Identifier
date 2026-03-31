@@ -26,49 +26,51 @@ def load_model():
         st.error(f"Error loading the model: {e}")
         return None
 
-def audio_to_spectrogram(audio_bytes, suffix):
+def process_audio(audio_bytes, suffix):
     """
-    Converts raw audio bytes into a mel-spectrogram image using librosa and matplotlib.
+    Converts raw audio bytes into an image array matching the exact parameters used during training.
     """
-    # Save uploaded audio to a temporary file
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_audio:
         temp_audio.write(audio_bytes)
         temp_audio_path = temp_audio.name
         
     try:
-        # Load audio (automatically handles resampling if necessary)
-        y, sr = librosa.load(temp_audio_path, sr=None)
-        
-        # Create standard mel spectrogram
-        mel_spect = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=128, fmax=8000)
-        mel_spect_db = librosa.power_to_db(mel_spect, ref=np.max)
-        
-        # Plot to an image buffer without axes
-        fig, ax = plt.subplots(figsize=(5, 5))
-        ax.axis('off') # Remove axes for pure spectrogram image
-        librosa.display.specshow(mel_spect_db, sr=sr, x_axis=None, y_axis=None, ax=ax, fmax=8000)
-        
-        # Remove padding
+        # Convert audio to mel-spectrogram array using user's exact parameters
+        y, sr = librosa.load(temp_audio_path, sr=22050, mono=True)
+
+        mel_spec_db = librosa.power_to_db(
+            librosa.feature.melspectrogram(y=y, sr=sr, n_mels=128, fmax=8000),
+            ref=np.max
+        )
+
+        # Render to in-memory image
+        fig, ax = plt.subplots(figsize=(IMG_WIDTH / 100, IMG_HEIGHT / 100), dpi=100)
+        librosa.display.specshow(mel_spec_db, sr=sr, fmax=8000, ax=ax)
+        ax.axis("off")
         plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
-        
+
         buf = io.BytesIO()
-        fig.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
+        fig.savefig(buf, format="png", bbox_inches="tight", pad_inches=0)
         plt.close(fig)
         buf.seek(0)
+
+        # Return exact img_array conversion
+        img_array = np.array(
+            Image.open(buf).convert("RGB").resize((IMG_WIDTH, IMG_HEIGHT)),
+            dtype=np.float32
+        ) / 255.0
         
-        # Return as PIL Image matching the model's training pipeline expected format
-        return Image.open(buf).convert('RGB')
+        return img_array
     except Exception as e:
         st.error(f"Failed to process audio file: {e}")
         return None
     finally:
-        # Cleanup temporary audio file
         if os.path.exists(temp_audio_path):
             os.remove(temp_audio_path)
 
 def main():
     st.title("🎙️ Language Identification")
-    st.write("Upload a short audio clip to classify whether the spoken language is **English** or **Hindi**.")
+    st.write("Upload a short audio clip (or an existing spectrogram) to classify whether the spoken language is **English** or **Hindi**.")
 
     model = load_model()
 
@@ -76,38 +78,43 @@ def main():
         st.warning("Please ensure the model file `language_id_model.keras` is placed in the same directory.")
         return
 
-    # Updated file uploader to accept audio formats
-    uploaded_file = st.file_uploader("Choose an audio file (WAV, MP3, etc.)", type=["wav", "mp3", "ogg", "flac"])
+    # Accept both audio and image files
+    uploaded_file = st.file_uploader("Choose a file (Audio or Image)", type=["wav", "mp3", "ogg", "flac", "png", "jpg", "jpeg"])
 
     if uploaded_file is not None:
-        # Display an audio player so the user can listen to the uploaded file
-        st.audio(uploaded_file)
+        file_extension = os.path.splitext(uploaded_file.name)[1].lower()
+        img_array = None
         
-        with st.spinner('Converting audio & analyzing...'):
-            # Convert the raw audio to a spectrogram image
-            file_extension = os.path.splitext(uploaded_file.name)[1]
-            image = audio_to_spectrogram(uploaded_file.read(), file_extension)
+        if file_extension in ['.png', '.jpg', '.jpeg']:
+            # Handle image uploads directly (useful for testing Colab images)
+            image = Image.open(uploaded_file).convert('RGB')
+            # Preprocess image
+            img = image.resize((IMG_WIDTH, IMG_HEIGHT))
+            img_array = tf.keras.preprocessing.image.img_to_array(img)
+            img_array = img_array / 255.0
+        else:
+            # Handle audio uploads
+            st.audio(uploaded_file)
+            with st.spinner('Converting audio & analyzing...'):
+                img_array = process_audio(uploaded_file.read(), file_extension)
+        
+        if img_array is not None:
+            st.write("### Analysis Results")
             
-            if image is not None:
-                st.write("### Analysis Results")
-                
-                # Preprocess for model (Resize to 128x128, scale 0-1, add batch dimension)
-                img = image.resize((IMG_WIDTH, IMG_HEIGHT))
-                img_array = tf.keras.preprocessing.image.img_to_array(img)
-                img_array = img_array / 255.0
-                img_array = np.expand_dims(img_array, axis=0)
-                
-                # Make prediction
-                prediction = model.predict(img_array)[0][0]
-                
-                is_hindi = prediction > 0.5
-                predicted_class = CLASS_NAMES[1] if is_hindi else CLASS_NAMES[0]
-                confidence = prediction if is_hindi else (1 - prediction)
-                
-                color = "green" if confidence > 0.8 else "orange"
-                st.markdown(f"**Predicted Language:** <span style='color:{color}; font-size:24px;'>{predicted_class}</span>", unsafe_allow_html=True)
-                st.write(f"**Confidence:** {confidence * 100:.2f}%")
-                st.progress(float(confidence))
+            # Add batch dimension
+            img_array = np.expand_dims(img_array, axis=0)
+            
+            # Make prediction
+            prediction = model.predict(img_array)[0][0]
+            
+            is_hindi = prediction > 0.5
+            predicted_class = CLASS_NAMES[1] if is_hindi else CLASS_NAMES[0]
+            confidence = prediction if is_hindi else (1 - prediction)
+            
+            color = "green" if confidence > 0.8 else "orange"
+            st.markdown(f"**Predicted Language:** <span style='color:{color}; font-size:24px;'>{predicted_class}</span>", unsafe_allow_html=True)
+            st.write(f"**Confidence:** {confidence * 100:.2f}%")
+            st.progress(float(confidence))
 
 if __name__ == '__main__':
     main()
