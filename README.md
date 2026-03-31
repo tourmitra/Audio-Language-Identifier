@@ -13,5 +13,8 @@ Instead of traditional audio processing, this project leverages computer vision 
 - **Environment**: Python 3.11
 
 ## Links
-- **Deployment Link**: [https://audio-language-identifier.streamlit.app](https://audio-language-identifier.streamlit.app)
-- **GitHub Repository**: [https://github.com/tourmitra/Audio-Language-Identifier](https://github.com/tourmitra/Audio-Language-Identifier)
+
+- **Deployment Link**: [Streamlit](https://audio-language-identifier.streamlit.app)
+- **Colab Notebook Link**: [Colab](https://colab.research.google.com/drive/1dTcJhjbJCCeb8RPXn5zxddErfquAIEyK#scrollTo=pMpwnlO1dasK)
+- **GitHub Repository**: [GitHub](https://github.com/tourmitra/Audio-Language-Identifier)
+- **Dataset Used**: [Kaggle](https://www.kaggle.com/datasets/abhay242/english-hindi-audio-spectrograms)
